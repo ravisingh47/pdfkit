@@ -16,7 +16,7 @@ class PDFKit
     end
   end
 
-  attr_accessor :source, :stylesheets
+  attr_accessor :source, :stylesheets, :header, :footer
   attr_reader :options
 
   def initialize(url_file_or_html, options = {})
@@ -25,6 +25,7 @@ class PDFKit
     @stylesheets = []
 
     @options = PDFKit.configuration.default_options.merge(options)
+    @temp_path = @options.delete(:temp_path)
     @options.delete(:quiet) if PDFKit.configuration.verbose?
     @options.merge! find_options_in_meta(url_file_or_html) unless source.url?
     @options = normalize_options(@options)
@@ -129,6 +130,9 @@ class PDFKit
     options.each do |key, value|
       next if !value
 
+      if [:header, :footer].include? key.to_sym
+        key, value = convert_header_or_footer(key, value)
+      end
       # The actual option for wkhtmltopdf
       normalized_key = normalize_arg key
       normalized_key = "--#{normalized_key}" unless SPECIAL_OPTIONS.include?(normalized_key)
@@ -143,7 +147,20 @@ class PDFKit
       end
     end
 
+    puts normalized_options
     normalized_options
+  end
+
+  def convert_header_or_footer(key, value)
+    key = "#{key}-html"
+    source = Source.new(value)
+    if source.url?
+      value
+    else
+      value = TempfileWithExt.string_to_file(value, 'pdfkit-#{key}.html', @temp_path)
+    end
+
+    [key, value]
   end
 
   def normalize_arg(arg)
